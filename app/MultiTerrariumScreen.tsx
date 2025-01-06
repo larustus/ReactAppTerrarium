@@ -1,10 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
     FlatList,
     ActivityIndicator,
     StyleSheet,
+    ImageBackground,
+    Modal,
+    TextInput,
+    TouchableOpacity,
+    Alert,
+    KeyboardAvoidingView,
+    TouchableWithoutFeedback,
+    Keyboard,
+    Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
@@ -15,41 +24,74 @@ interface TerrariumData {
     current_temp2: number;
     current_hum: number;
     last_update: string;
-    type: string; // Added type field
+    type: string;
 }
 
 const MultiTerrariumScreen: React.FC = () => {
     const [terrariums, setTerrariums] = useState<TerrariumData[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
+    const [selectedTerrarium, setSelectedTerrarium] = useState<TerrariumData | null>(null);
+    const [modalVisible, setModalVisible] = useState(false);
+    const [tempGoal, setTempGoal] = useState<string>('');
+    const [humGoal, setHumGoal] = useState<string>('');
+    const [maxTemp, setMaxTemp] = useState<string>('');
+    const [minTemp, setMinTemp] = useState<string>('');
+    const [maxHum, setMaxHum] = useState<string>('');
+    const [minHum, setMinHum] = useState<string>('');
+
+    const ws = useRef<WebSocket | null>(null);
 
     useEffect(() => {
-        const ws = new WebSocket('ws://212.47.71.180:8082');
+        ws.current = new WebSocket('ws://212.47.71.180:8082');
 
-        ws.onopen = () => {
+        ws.current.onopen = () => {
             console.log('WebSocket connected');
         };
 
-        ws.onmessage = (event) => {
+        ws.current.onmessage = (event) => {
             const updatedTerrariums: TerrariumData[] = JSON.parse(event.data);
-            console.log('WebSocket message received:', updatedTerrariums);
             setTerrariums(updatedTerrariums);
             setLoading(false);
         };
 
-        ws.onerror = (err) => {
+        ws.current.onerror = (err) => {
             console.error('WebSocket error:', err);
             setError('Failed to connect to WebSocket');
         };
 
-        ws.onclose = () => {
+        ws.current.onclose = () => {
             console.log('WebSocket disconnected');
         };
 
         return () => {
-            ws.close();
+            if (ws.current) {
+                ws.current.close();
+            }
         };
     }, []);
+
+    const openModal = (terrarium: TerrariumData) => {
+        setSelectedTerrarium(terrarium);
+        setTempGoal('');
+        setHumGoal('');
+        setMaxTemp('');
+        setMinTemp('');
+        setMaxHum('');
+        setMinHum('');
+        setModalVisible(true);
+    };
+
+    const handleSave = (field: string, value: string) => {
+        if (!selectedTerrarium) return;
+
+        // Placeholder: Replace with API call to update the specific field for the terrarium
+        console.log(`Updating ${field} of Terrarium ${selectedTerrarium.id} to ${value}`);
+
+        // Close modal and refresh the list if necessary
+        Alert.alert('Success', `${field} updated successfully.`);
+        setModalVisible(false);
+    };
 
     if (loading) {
         return (
@@ -68,7 +110,13 @@ const MultiTerrariumScreen: React.FC = () => {
     }
 
     return (
-        <View style={styles.container}>
+        <ImageBackground
+            source={require('../app/app_tabs/backround_image.jpg')}
+            style={styles.background}
+            resizeMode="cover"
+        >
+            <View style={styles.overlay} />
+
             <FlatList
                 data={terrariums}
                 keyExtractor={(item) => item.id.toString()}
@@ -82,14 +130,12 @@ const MultiTerrariumScreen: React.FC = () => {
                         type,
                     } = item;
 
-                    // Format the date as DD/MM/YYYY
                     const formattedDate = new Intl.DateTimeFormat('en-GB', {
                         day: '2-digit',
                         month: '2-digit',
                         year: 'numeric',
                     }).format(new Date(last_update));
 
-                    // Format the time as HH:mm:ss (24-hour format)
                     const formattedTime = new Intl.DateTimeFormat('en-GB', {
                         hour: '2-digit',
                         minute: '2-digit',
@@ -99,7 +145,12 @@ const MultiTerrariumScreen: React.FC = () => {
 
                     return (
                         <View style={styles.terrariumCard}>
-                            <Text style={styles.nameText}>{name}</Text>
+                            <View style={styles.row}>
+                                <Text style={styles.nameText}>{name}</Text>
+                                <TouchableOpacity onPress={() => openModal(item)}>
+                                    <Icon name="pencil" size={24} color="#2196f3" />
+                                </TouchableOpacity>
+                            </View>
                             <View style={styles.row}>
                                 <Icon name="thermometer" size={24} color="#ff5722" />
                                 <Text style={styles.label}>Temperature 1: {current_temp1}°C</Text>
@@ -127,14 +178,75 @@ const MultiTerrariumScreen: React.FC = () => {
                 }}
                 contentContainerStyle={styles.listContent}
             />
-        </View>
+
+            {/* Modal for Editing Terrarium */}
+            <Modal
+                visible={modalVisible}
+                animationType="slide"
+                transparent={true}
+                onRequestClose={() => setModalVisible(false)}
+            >
+                <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                    <KeyboardAvoidingView
+                        style={styles.modalContainer}
+                        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                    >
+                        <View style={styles.modalContent}>
+                            <Text style={styles.modalTitle}>
+                                Edit Terrarium: {selectedTerrarium?.name}
+                            </Text>
+                            <TextInput
+                                style={styles.input}
+                                value={tempGoal}
+                                onChangeText={setTempGoal}
+                                placeholder="Temperature Goal"
+                                keyboardType="numeric"
+                            />
+                            <TouchableOpacity
+                                onPress={() => handleSave('Temperature Goal', tempGoal)}
+                                style={styles.saveButton}
+                            >
+                                <Icon name="content-save" size={24} color="#fff" />
+                            </TouchableOpacity>
+
+                            <TextInput
+                                style={styles.input}
+                                value={humGoal}
+                                onChangeText={setHumGoal}
+                                placeholder="Humidity Goal"
+                                keyboardType="numeric"
+                            />
+                            <TouchableOpacity
+                                onPress={() => handleSave('Humidity Goal', humGoal)}
+                                style={styles.saveButton}
+                            >
+                                <Icon name="content-save" size={24} color="#fff" />
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                onPress={() => setModalVisible(false)}
+                                style={styles.cancelButton}
+                            >
+                                <Text style={styles.cancelText}>Close</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </KeyboardAvoidingView>
+                </TouchableWithoutFeedback>
+            </Modal>
+        </ImageBackground>
     );
 };
 
 const styles = StyleSheet.create({
+    background: {
+        flex: 1,
+    },
+    overlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    },
     container: {
         flex: 1,
-        backgroundColor: '#f8f8f8',
         padding: 10,
     },
     terrariumCard: {
@@ -151,17 +263,16 @@ const styles = StyleSheet.create({
     nameText: {
         fontSize: 20,
         fontWeight: 'bold',
-        marginBottom: 10,
         color: '#333',
-        textAlign: 'center',
+        flex: 1,
     },
     row: {
         flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: 10,
     },
     label: {
-        marginLeft: 10,
         fontSize: 16,
         color: '#555',
     },
@@ -169,9 +280,50 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: 'red',
         textAlign: 'center',
+        marginTop: 20,
     },
     listContent: {
         paddingBottom: 20,
+    },
+    modalContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    },
+    modalContent: {
+        width: '90%',
+        backgroundColor: '#fff',
+        borderRadius: 10,
+        padding: 20,
+        alignItems: 'center',
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        marginBottom: 20,
+    },
+    input: {
+        width: '100%',
+        borderWidth: 1,
+        borderColor: '#ccc',
+        borderRadius: 5,
+        padding: 10,
+        marginBottom: 10,
+    },
+    saveButton: {
+        backgroundColor: '#4CAF50',
+        padding: 10,
+        borderRadius: 5,
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    cancelButton: {
+        marginTop: 20,
+    },
+    cancelText: {
+        color: '#f00',
+        fontWeight: 'bold',
     },
 });
 
