@@ -6,6 +6,8 @@ import {
     Button,
     Dimensions,
     ActivityIndicator,
+    FlatList,
+    ImageBackground,
 } from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
 import { BarChart } from "react-native-chart-kit";
@@ -25,15 +27,13 @@ interface DailyAverage {
 const StatisticsScreen: React.FC = () => {
     const [terrariums, setTerrariums] = useState<TerrariumData[]>([]);
     const [selectedTerrarium, setSelectedTerrarium] = useState<number | null>(null);
-    const [selectedMetric, setSelectedMetric] = useState<keyof DailyAverage>(
-        "temperature_1"
-    );
+    const [selectedMetric, setSelectedMetric] = useState<keyof DailyAverage>("temperature_1");
     const [currentWeek, setCurrentWeek] = useState<Date>(new Date());
     const [dailyAverages, setDailyAverages] = useState<Record<string, DailyAverage>>({});
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
 
-    // Dropdown open states
+    // Dropdown states
     const [terrariumDropdownOpen, setTerrariumDropdownOpen] = useState(false);
     const [metricDropdownOpen, setMetricDropdownOpen] = useState(false);
 
@@ -169,97 +169,121 @@ const StatisticsScreen: React.FC = () => {
     };
 
     return (
-        <View style={styles.container}>
-            <Text style={styles.title}>Statistics</Text>
+        <ImageBackground
+            source={require("../app/app_tabs/backround_image.jpg")}
+            style={styles.background}
+            resizeMode="cover"
+        >
+            <View style={styles.overlay} />
+            <FlatList
+                data={[]}
+                renderItem={null} // Empty list for consistent FlatList behavior
+                ListHeaderComponent={
+                    <View style={styles.container}>
+                        <Text style={styles.title}>Statistics</Text>
 
-            {/* Terrarium Dropdown */}
-            <DropDownPicker
-                open={terrariumDropdownOpen}
-                value={selectedTerrarium}
-                items={terrariums.map((terrarium) => ({
-                    label: terrarium.name,
-                    value: terrarium.id,
-                }))}
-                setOpen={setTerrariumDropdownOpen}
-                onOpen={() => setMetricDropdownOpen(false)} // Close other dropdown
-                setValue={setSelectedTerrarium}
-                placeholder="Select a Terrarium"
-                style={styles.dropdown}
-                dropDownContainerStyle={styles.dropdownContainer}
-                zIndex={terrariumDropdownOpen ? 1000 : 1}
-                zIndexInverse={3000}
+                        {/* Terrarium Dropdown */}
+                        <DropDownPicker
+                            open={terrariumDropdownOpen}
+                            value={selectedTerrarium}
+                            items={terrariums.map((terrarium) => ({
+                                label: terrarium.name,
+                                value: terrarium.id,
+                            }))}
+                            setOpen={setTerrariumDropdownOpen}
+                            onOpen={() => setMetricDropdownOpen(false)} // Close other dropdown
+                            setValue={setSelectedTerrarium}
+                            placeholder="Select a Terrarium"
+                            style={styles.dropdown}
+                            dropDownContainerStyle={styles.dropdownContainer}
+                            zIndex={terrariumDropdownOpen ? 1000 : 1}
+                        />
+
+                        {/* Metric Dropdown */}
+                        <DropDownPicker
+                            open={metricDropdownOpen}
+                            value={selectedMetric}
+                            items={[
+                                { label: "Temperature 1", value: "temperature_1" },
+                                { label: "Temperature 2", value: "temperature_2" },
+                                { label: "Humidity", value: "humidity" },
+                            ]}
+                            setOpen={setMetricDropdownOpen}
+                            onOpen={() => setTerrariumDropdownOpen(false)} // Close other dropdown
+                            setValue={setSelectedMetric}
+                            placeholder="Select Metric"
+                            style={styles.dropdown}
+                            dropDownContainerStyle={styles.dropdownContainer}
+                            zIndex={metricDropdownOpen ? 1000 : 1}
+                        />
+
+                        {/* Week Range */}
+                        <View style={styles.weekRangeContainer}>
+                            <Text style={styles.weekText}>
+                                Week Range:
+                                {"\n"}
+                                {start} - {end}
+                            </Text>
+                        </View>
+
+                        {/* Buttons */}
+                        <View style={styles.buttonContainer}>
+                            <View style={styles.buttonBox}>
+                                <Button title="Previous Week" onPress={handlePreviousWeek} />
+                            </View>
+                            <View style={styles.buttonBox}>
+                                <Button title="Next Week" onPress={handleNextWeek} />
+                            </View>
+                        </View>
+
+                        {/* Chart */}
+                        {loading ? (
+                            <ActivityIndicator size="large" color="#0000ff" />
+                        ) : (
+                            <BarChart
+                                data={chartData}
+                                width={Dimensions.get("window").width - 40}
+                                height={300}
+                                yAxisLabel=""
+                                yAxisSuffix={selectedMetric === "humidity" ? "%" : "°C"}
+                                chartConfig={{
+                                    backgroundColor: "#f8f8f8",
+                                    backgroundGradientFrom: "#ffffff",
+                                    backgroundGradientTo: "#e0e0e0",
+                                    decimalPlaces: 1,
+                                    color: () => getMetricColor(),
+                                    labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                                    style: {
+                                        borderRadius: 16,
+                                    },
+                                }}
+                                style={{
+                                    marginVertical: 8,
+                                    borderRadius: 16,
+                                    alignSelf: "center",
+                                }}
+                                fromZero={true}
+                            />
+                        )}
+
+                        {error && <Text style={styles.errorText}>{error}</Text>}
+                    </View>
+                }
             />
-
-            {/* Metric Dropdown */}
-            <DropDownPicker
-                open={metricDropdownOpen}
-                value={selectedMetric}
-                items={[
-                    { label: "Temperature 1", value: "temperature_1" },
-                    { label: "Temperature 2", value: "temperature_2" },
-                    { label: "Humidity", value: "humidity" },
-                ]}
-                setOpen={setMetricDropdownOpen}
-                onOpen={() => setTerrariumDropdownOpen(false)} // Close other dropdown
-                setValue={setSelectedMetric}
-                placeholder="Select Metric"
-                style={styles.dropdown}
-                dropDownContainerStyle={styles.dropdownContainer}
-                zIndex={metricDropdownOpen ? 1000 : 1}
-                zIndexInverse={2000}
-            />
-
-            {/* Week Range Display */}
-            <Text style={styles.weekText}>
-                Week Range: {start} - {end}
-            </Text>
-
-            {/* Navigation Buttons */}
-            <View style={styles.buttonContainer}>
-                <Button title="Previous Week" onPress={handlePreviousWeek} />
-                <Button title="Next Week" onPress={handleNextWeek} />
-            </View>
-
-            {loading ? (
-                <ActivityIndicator size="large" color="#0000ff" />
-            ) : (
-                <BarChart
-                    data={chartData}
-                    width={Dimensions.get("window").width - 20}
-                    height={300}
-                    yAxisLabel=""
-                    yAxisSuffix={selectedMetric === "humidity" ? "%" : "°C"}
-                    chartConfig={{
-                        backgroundColor: "#f8f8f8",
-                        backgroundGradientFrom: "#ffffff",
-                        backgroundGradientTo: "#e0e0e0",
-                        decimalPlaces: 1,
-                        color: () => getMetricColor(),
-                        labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                        style: {
-                            borderRadius: 16,
-                        },
-                    }}
-                    style={{
-                        marginVertical: 8,
-                        borderRadius: 16,
-                    }}
-                    fromZero={true}
-                />
-            )}
-
-            {error && <Text style={styles.errorText}>{error}</Text>}
-        </View>
+        </ImageBackground>
     );
 };
 
 const styles = StyleSheet.create({
-    container: {
+    background: {
         flex: 1,
-        justifyContent: "flex-start",
-        alignItems: "center",
+    },
+    overlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: "rgba(255, 255, 255, 0.3)", // Dimmed overlay
+    },
+    container: {
         padding: 20,
-        backgroundColor: "#fff",
     },
     title: {
         fontSize: 20,
@@ -276,16 +300,31 @@ const styles = StyleSheet.create({
         backgroundColor: "#fff",
         borderColor: "#ccc",
     },
+    weekRangeContainer: {
+        backgroundColor: "#fff",
+        borderRadius: 10,
+        padding: 10,
+        marginVertical: 10,
+        alignSelf: "center",
+    },
     weekText: {
         fontSize: 16,
         fontWeight: "bold",
-        marginVertical: 20,
+        textAlign: "center",
     },
     buttonContainer: {
         flexDirection: "row",
         justifyContent: "space-between",
         width: "80%",
-        marginTop: 20,
+        alignSelf: "center",
+        marginVertical: 10,
+    },
+    buttonBox: {
+        backgroundColor: "#fff",
+        borderRadius: 10,
+        overflow: "hidden",
+        flex: 1,
+        marginHorizontal: 5,
     },
     errorText: {
         fontSize: 16,

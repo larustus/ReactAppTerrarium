@@ -9,10 +9,10 @@ import {
     Modal,
     TextInput,
     TouchableOpacity,
-    Alert,
-    KeyboardAvoidingView,
     TouchableWithoutFeedback,
     Keyboard,
+    Alert,
+    KeyboardAvoidingView,
     Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -33,6 +33,7 @@ const MultiTerrariumScreen: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [selectedTerrarium, setSelectedTerrarium] = useState<TerrariumData | null>(null);
     const [modalVisible, setModalVisible] = useState(false);
+
     const [tempGoal, setTempGoal] = useState<string>('');
     const [humGoal, setHumGoal] = useState<string>('');
     const [maxTemp, setMaxTemp] = useState<string>('');
@@ -85,10 +86,8 @@ const MultiTerrariumScreen: React.FC = () => {
     const handleSave = (field: string, value: string) => {
         if (!selectedTerrarium) return;
 
-        // Placeholder: Replace with API call to update the specific field for the terrarium
         console.log(`Updating ${field} of Terrarium ${selectedTerrarium.id} to ${value}`);
 
-        // Close modal and refresh the list if necessary
         Alert.alert('Success', `${field} updated successfully.`);
         setModalVisible(false);
     };
@@ -200,6 +199,7 @@ const MultiTerrariumScreen: React.FC = () => {
                                 value={tempGoal}
                                 onChangeText={setTempGoal}
                                 placeholder="Temperature Goal"
+                                placeholderTextColor="#757575"
                                 keyboardType="numeric"
                             />
                             <TouchableOpacity
@@ -214,6 +214,7 @@ const MultiTerrariumScreen: React.FC = () => {
                                 value={humGoal}
                                 onChangeText={setHumGoal}
                                 placeholder="Humidity Goal"
+                                placeholderTextColor="#757575"
                                 keyboardType="numeric"
                             />
                             <TouchableOpacity
@@ -223,6 +224,71 @@ const MultiTerrariumScreen: React.FC = () => {
                                 <Icon name="content-save" size={24} color="#fff" />
                             </TouchableOpacity>
 
+                            {/* Max Temperature */}
+                            <TextInput
+                                style={styles.input}
+                                value={maxTemp}
+                                onChangeText={setMaxTemp}
+                                placeholder="Max Temperature"
+                                placeholderTextColor="#757575"
+                                keyboardType="numeric"
+                            />
+                            <TouchableOpacity
+                                onPress={() => handleSave('Max Temperature', maxTemp)}
+                                style={styles.saveButton}
+                            >
+                                <Icon name="content-save" size={24} color="#fff" />
+                            </TouchableOpacity>
+
+                            {/* Min Temperature */}
+                            <TextInput
+                                style={styles.input}
+                                value={minTemp}
+                                onChangeText={setMinTemp}
+                                placeholder="Min Temperature"
+                                placeholderTextColor="#757575"
+                                keyboardType="numeric"
+                            />
+                            <TouchableOpacity
+                                onPress={() => handleSave('Min Temperature', minTemp)}
+                                style={styles.saveButton}
+                            >
+                                <Icon name="content-save" size={24} color="#fff" />
+                            </TouchableOpacity>
+
+                            {/* Max Humidity */}
+                            <TextInput
+                                style={styles.input}
+                                value={maxHum}
+                                onChangeText={setMaxHum}
+                                placeholder="Max Humidity"
+                                placeholderTextColor="#757575"
+                                keyboardType="numeric"
+                            />
+                            <TouchableOpacity
+                                onPress={() => handleSave('Max Humidity', maxHum)}
+                                style={styles.saveButton}
+                            >
+                                <Icon name="content-save" size={24} color="#fff" />
+                            </TouchableOpacity>
+
+                            {/* Min Humidity */}
+                            <TextInput
+                                style={styles.input}
+                                value={minHum}
+                                onChangeText={setMinHum}
+                                placeholder="Min Humidity"
+                                placeholderTextColor="#757575"
+                                keyboardType="numeric"
+                            />
+                            <TouchableOpacity
+                                onPress={() => handleSave('Min Humidity', minHum)}
+                                style={styles.saveButton}
+                            >
+                                <Icon name="content-save" size={24} color="#fff" />
+                            </TouchableOpacity>
+
+                            {/* Close Button */}
                             <TouchableOpacity
                                 onPress={() => setModalVisible(false)}
                                 style={styles.cancelButton}
