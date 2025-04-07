@@ -8,34 +8,44 @@ import {
     ActivityIndicator,
     FlatList,
     ImageBackground,
+    ScrollView,
 } from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
 import { BarChart } from "react-native-chart-kit";
+//import DateTimePicker from '@react-native-community/datetimepicker';
+import { TouchableOpacity, Platform } from 'react-native';
+
+
 
 interface TerrariumData {
     id: number;
     name: string;
 }
 
-interface DailyAverage {
-    temperature_1: number;
-    temperature_2: number;
+interface HourlyReading {
+    temperature1: number;
+    temperature2: number;
     humidity: number;
-    count: number;
+    hour: number;
 }
 
 const StatisticsScreen: React.FC = () => {
     const [terrariums, setTerrariums] = useState<TerrariumData[]>([]);
     const [selectedTerrarium, setSelectedTerrarium] = useState<number | null>(null);
-    const [selectedMetric, setSelectedMetric] = useState<keyof DailyAverage>("temperature_1");
-    const [currentWeek, setCurrentWeek] = useState<Date>(new Date());
-    const [dailyAverages, setDailyAverages] = useState<Record<string, DailyAverage>>({});
+    const [selectedMetric, setSelectedMetric] = useState<keyof HourlyReading>("temperature1");
+    const [selectedDate, setSelectedDate] = useState<string>(
+        new Date().toISOString().split("T")[0]
+    );
+    const [hourlyReadings, setHourlyReadings] = useState<HourlyReading[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
 
     // Dropdown states
     const [terrariumDropdownOpen, setTerrariumDropdownOpen] = useState(false);
     const [metricDropdownOpen, setMetricDropdownOpen] = useState(false);
+
+    //const [showDatePicker, setShowDatePicker] = useState(false);
+
 
     useEffect(() => {
         const fetchTerrariums = async () => {
@@ -52,118 +62,52 @@ const StatisticsScreen: React.FC = () => {
         fetchTerrariums();
     }, []);
 
-    const getWeekRange = (date: Date) => {
-        const startOfWeek = new Date(date);
-        startOfWeek.setDate(date.getDate() - date.getDay());
-        startOfWeek.setHours(0, 0, 0, 0);
-
-        const endOfWeek = new Date(startOfWeek);
-        endOfWeek.setDate(startOfWeek.getDate() + 6);
-        endOfWeek.setHours(23, 59, 59, 999);
-
-        const formatDate = (d: Date) =>
-            `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, "0")}-${d
-                .getDate()
-                .toString()
-                .padStart(2, "0")}`;
-
-        return {
-            start: formatDate(startOfWeek),
-            end: formatDate(endOfWeek),
-            days: Array.from({ length: 7 }).map((_, i) => {
-                const day = new Date(startOfWeek);
-                day.setDate(startOfWeek.getDate() + i);
-                return formatDate(day);
-            }),
-        };
-    };
-
-    const fetchReadingsForWeek = async () => {
+    const fetchReadingsForDay = async () => {
         if (!selectedTerrarium) return;
-
         setLoading(true);
         setError(null);
 
-        const { days } = getWeekRange(currentWeek);
-        const dailyData: Record<string, DailyAverage> = {};
-
         try {
-            for (const day of days) {
-                const response = await fetch(
-                    `http://212.47.71.180:8080/readings/day/${day}/terrarium/${selectedTerrarium}`
-                );
-                if (!response.ok) continue;
-
-                const readings: any[] = await response.json();
-
-                const dailyAverage = readings.reduce(
-                    (acc, reading) => {
-                        acc.temperature_1 += reading.temperature_1;
-                        acc.temperature_2 += reading.temperature_2;
-                        acc.humidity += reading.humidity;
-                        acc.count += 1;
-                        return acc;
-                    },
-                    { temperature_1: 0, temperature_2: 0, humidity: 0, count: 0 }
-                );
-
-                dailyData[day] = dailyAverage;
-            }
-
-            setDailyAverages(
-                Object.fromEntries(
-                    Object.entries(dailyData).map(([day, data]) => [
-                        day,
-                        {
-                            temperature_1:
-                                data.count > 0 ? data.temperature_1 / data.count : 0,
-                            temperature_2:
-                                data.count > 0 ? data.temperature_2 / data.count : 0,
-                            humidity: data.count > 0 ? data.humidity / data.count : 0,
-                            count: data.count,
-                        },
-                    ])
-                )
+            const response = await fetch(
+                `http://212.47.71.180:8080/readings/day/${selectedDate}/terrarium/${selectedTerrarium}`
             );
+            if (!response.ok) throw new Error("Failed to fetch readings");
+
+            const data = await response.json();
+            setHourlyReadings(data);
         } catch (err: any) {
-            setError("Failed to fetch readings");
+            setError(err.message);
         } finally {
             setLoading(false);
         }
     };
 
+    const changeDate = (days: number) => {
+        const current = new Date(selectedDate);
+        current.setDate(current.getDate() + days);
+        const formatted = current.toISOString().split("T")[0];
+        setSelectedDate(formatted);
+    };
+
+
+
     useEffect(() => {
-        if (selectedTerrarium) fetchReadingsForWeek();
-    }, [selectedTerrarium, currentWeek]);
-
-    const handlePreviousWeek = () => {
-        const previousWeek = new Date(currentWeek);
-        previousWeek.setDate(currentWeek.getDate() - 7);
-        setCurrentWeek(previousWeek);
-    };
-
-    const handleNextWeek = () => {
-        const nextWeek = new Date(currentWeek);
-        nextWeek.setDate(currentWeek.getDate() + 7);
-        if (nextWeek > new Date()) return;
-        setCurrentWeek(nextWeek);
-    };
-
-    const { start, end, days } = getWeekRange(currentWeek);
+        if (selectedTerrarium) fetchReadingsForDay();
+    }, [selectedTerrarium, selectedDate]);
 
     const getMetricColor = () => {
-        if (selectedMetric === "temperature_1") return "#ffa726"; // Orange
-        if (selectedMetric === "temperature_2") return "#ffeb3b"; // Yellow
+        if (selectedMetric === "temperature1") return "#9c27b0"; // Purple
+        if (selectedMetric === "temperature2") return "#f44336"; // Red
         return "#42a5f5"; // Blue for humidity
     };
 
-    const chartValues = days.map((day) => dailyAverages[day]?.[selectedMetric] ?? 0);
-
     const chartData = {
-        labels: ["S", "M", "T", "W", "T", "F", "S"], // Shortened day names
+        labels: Array.from({ length: 24 }, (_, i) =>
+            [0, 6, 12, 18].includes(i) ? i.toString().padStart(2, "0") : ""
+        ),
         datasets: [
             {
-                data: chartValues,
+                data: hourlyReadings.map((reading) => reading[selectedMetric] ?? 0),
             },
         ],
     };
@@ -175,12 +119,15 @@ const StatisticsScreen: React.FC = () => {
             resizeMode="cover"
         >
             <View style={styles.overlay} />
+            <View style={styles.titleContainer}>
+                <Text style={styles.titleText}>Statystyki</Text>
+            </View>
             <FlatList
                 data={[]}
-                renderItem={null} // Empty list for consistent FlatList behavior
+                renderItem={null}
                 ListHeaderComponent={
                     <View style={styles.container}>
-                        <Text style={styles.title}>Statistics</Text>
+
 
                         {/* Terrarium Dropdown */}
                         <DropDownPicker
@@ -191,9 +138,9 @@ const StatisticsScreen: React.FC = () => {
                                 value: terrarium.id,
                             }))}
                             setOpen={setTerrariumDropdownOpen}
-                            onOpen={() => setMetricDropdownOpen(false)} // Close other dropdown
+                            onOpen={() => setMetricDropdownOpen(false)}
                             setValue={setSelectedTerrarium}
-                            placeholder="Select a Terrarium"
+                            placeholder="Wybierz terrarium"
                             style={styles.dropdown}
                             dropDownContainerStyle={styles.dropdownContainer}
                             zIndex={terrariumDropdownOpen ? 1000 : 1}
@@ -204,12 +151,12 @@ const StatisticsScreen: React.FC = () => {
                             open={metricDropdownOpen}
                             value={selectedMetric}
                             items={[
-                                { label: "Temperature 1", value: "temperature_1" },
-                                { label: "Temperature 2", value: "temperature_2" },
-                                { label: "Humidity", value: "humidity" },
+                                { label: "Temperatura 1", value: "temperature1" },
+                                { label: "Temperatura 2", value: "temperature2" },
+                                { label: "Wilgotność", value: "humidity" },
                             ]}
                             setOpen={setMetricDropdownOpen}
-                            onOpen={() => setTerrariumDropdownOpen(false)} // Close other dropdown
+                            onOpen={() => setTerrariumDropdownOpen(false)}
                             setValue={setSelectedMetric}
                             placeholder="Select Metric"
                             style={styles.dropdown}
@@ -217,53 +164,53 @@ const StatisticsScreen: React.FC = () => {
                             zIndex={metricDropdownOpen ? 1000 : 1}
                         />
 
-                        {/* Week Range */}
-                        <View style={styles.weekRangeContainer}>
-                            <Text style={styles.weekText}>
-                                Week Range:
-                                {"\n"}
-                                {start} - {end}
-                            </Text>
-                        </View>
+                        {/* Date */}
+                        <View style={styles.dateSelector}>
+                            <TouchableOpacity onPress={() => changeDate(-1)} style={styles.arrowButton}>
+                                <Text style={styles.arrowText}>{'<'}</Text>
+                            </TouchableOpacity>
 
-                        {/* Buttons */}
-                        <View style={styles.buttonContainer}>
-                            <View style={styles.buttonBox}>
-                                <Button title="Previous Week" onPress={handlePreviousWeek} />
+                            <View style={styles.dateDisplay}>
+                                <Text style={styles.dateText}>{selectedDate}</Text>
                             </View>
-                            <View style={styles.buttonBox}>
-                                <Button title="Next Week" onPress={handleNextWeek} />
-                            </View>
+
+                            <TouchableOpacity onPress={() => changeDate(1)} style={styles.arrowButton}>
+                                <Text style={styles.arrowText}>{'>'}</Text>
+                            </TouchableOpacity>
                         </View>
 
                         {/* Chart */}
                         {loading ? (
                             <ActivityIndicator size="large" color="#0000ff" />
                         ) : (
-                            <BarChart
-                                data={chartData}
-                                width={Dimensions.get("window").width - 40}
-                                height={300}
-                                yAxisLabel=""
-                                yAxisSuffix={selectedMetric === "humidity" ? "%" : "°C"}
-                                chartConfig={{
-                                    backgroundColor: "#f8f8f8",
-                                    backgroundGradientFrom: "#ffffff",
-                                    backgroundGradientTo: "#e0e0e0",
-                                    decimalPlaces: 1,
-                                    color: () => getMetricColor(),
-                                    labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                                    style: {
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                <BarChart
+                                    data={chartData}
+                                    width={Dimensions.get("window").width * 2}
+                                    height={300}
+                                    yAxisLabel=""
+                                    yAxisSuffix={selectedMetric === "humidity" ? "%" : "°C"}
+                                    chartConfig={{
+                                        backgroundColor: "#f8f8f8",
+                                        backgroundGradientFrom: "#ffffff",
+                                        backgroundGradientTo: "#e0e0e0",
+                                        decimalPlaces: 1,
+                                        barPercentage: 0.3,
+                                        color: () => getMetricColor(),
+                                        labelColor: (opacity = 1) =>
+                                            `rgba(0, 0, 0, ${opacity})`,
+                                        style: {
+                                            borderRadius: 16,
+                                        },
+                                    }}
+                                    style={{
+                                        marginVertical: 8,
                                         borderRadius: 16,
-                                    },
-                                }}
-                                style={{
-                                    marginVertical: 8,
-                                    borderRadius: 16,
-                                    alignSelf: "center",
-                                }}
-                                fromZero={true}
-                            />
+                                        alignSelf: "center",
+                                    }}
+                                    fromZero={true}
+                                />
+                            </ScrollView>
                         )}
 
                         {error && <Text style={styles.errorText}>{error}</Text>}
@@ -280,7 +227,7 @@ const styles = StyleSheet.create({
     },
     overlay: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: "rgba(255, 255, 255, 0.3)", // Dimmed overlay
+        backgroundColor: "rgba(255, 255, 255, 0.3)",
     },
     container: {
         padding: 20,
@@ -300,36 +247,84 @@ const styles = StyleSheet.create({
         backgroundColor: "#fff",
         borderColor: "#ccc",
     },
-    weekRangeContainer: {
-        backgroundColor: "#fff",
-        borderRadius: 10,
-        padding: 10,
-        marginVertical: 10,
-        alignSelf: "center",
-    },
-    weekText: {
-        fontSize: 16,
-        fontWeight: "bold",
-        textAlign: "center",
-    },
-    buttonContainer: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        width: "80%",
-        alignSelf: "center",
-        marginVertical: 10,
-    },
-    buttonBox: {
-        backgroundColor: "#fff",
-        borderRadius: 10,
-        overflow: "hidden",
-        flex: 1,
-        marginHorizontal: 5,
-    },
     errorText: {
         fontSize: 16,
         color: "red",
     },
+    titleContainer: {
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        padding: 15,
+        alignItems: 'center',
+        borderBottomLeftRadius: 10,
+        borderBottomRightRadius: 10,
+        marginBottom: 10,
+    },
+    titleText: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: '#fff',
+    },
+    weekRangeContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#fff',
+        borderRadius: 10,
+        padding: 10,
+        marginVertical: 10,
+    },
+    weekText: {
+        fontSize: 16,
+        fontWeight: "bold",
+        marginHorizontal: 10,
+    },
+    arrow: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#333',
+        paddingHorizontal: 10,
+    },
+    dateSelector: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginVertical: 15,
+    },
+
+    arrowButton: {
+        backgroundColor: '#ffffff',
+        paddingHorizontal: 15,
+        paddingVertical: 8,
+        borderRadius: 8,
+        borderColor: '#4CAF50',
+        borderWidth: 1,
+        marginHorizontal: 10,
+        elevation: 2,
+    },
+
+    arrowText: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#4CAF50',
+    },
+
+    dateDisplay: {
+        backgroundColor: '#ffffff',
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 8,
+        borderColor: '#ccc',
+        borderWidth: 1,
+        elevation: 2,
+    },
+
+    dateText: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#333',
+    },
+
+
 });
 
 export default StatisticsScreen;

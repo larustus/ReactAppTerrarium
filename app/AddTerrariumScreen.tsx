@@ -3,17 +3,20 @@ import {
     View,
     Text,
     TextInput,
-    Button,
     StyleSheet,
     Alert,
     FlatList,
+    ImageBackground,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    Keyboard,
+    Switch,
 } from 'react-native';
 import DropDownPicker from 'react-native-dropdown-picker';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePickerModal from 'react-native-modal-datetime-picker';
 
 interface TerrariumDetails {
     name: string;
-    type: string | null;
     temperature_goal: string;
     humidity_goal: string;
     max_temp: string;
@@ -21,14 +24,16 @@ interface TerrariumDetails {
     max_hum: string;
     min_hum: string;
     water_time: Date | null;
-    water_period: string;
+    water_duration: string; // input as string, convert later if needed
+    shouldWater: boolean;
 }
 
 interface PinSelection {
     thermometer: number | null;
+    probe: number | null;
     hygrometer: number | null;
     heating: number | null;
-    water: number | null; // Optional
+    water: number | null;
 }
 
 interface PinOption {
@@ -37,10 +42,8 @@ interface PinOption {
 }
 
 const AddTerrariumScreen: React.FC = () => {
-    const [step, setStep] = useState(1); // Current page (1 or 2)
-    const [terrariumDetails, setTerrariumDetails] = useState<TerrariumDetails>({
+    const initialTerrariumDetails: TerrariumDetails = {
         name: '',
-        type: null,
         temperature_goal: '',
         humidity_goal: '',
         max_temp: '',
@@ -48,373 +51,612 @@ const AddTerrariumScreen: React.FC = () => {
         max_hum: '',
         min_hum: '',
         water_time: null,
-        water_period: '',
-    });
-    const [userId] = useState(1); // Assuming user ID is 1
-    const [pins, setPins] = useState<PinSelection>({
+        water_duration: '',
+        shouldWater: false,
+    };
+
+    const initialPins: PinSelection = {
+        probe: null,
         thermometer: null,
         hygrometer: null,
         heating: null,
         water: null,
-    });
-    const [showTimePicker, setShowTimePicker] = useState(false);
-    const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
+    };
 
-    // Dropdown open states for pins
+    const [step, setStep] = useState(1);
+    const [terrariumDetails, setTerrariumDetails] = useState<TerrariumDetails>(initialTerrariumDetails);
+    const [userId] = useState(1);
+    const [pins, setPins] = useState<PinSelection>(initialPins);
+
+    // Date picker state
+    const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
+
+    // Dropdown options and open states for pin assignments
     const [thermometerOptions, setThermometerOptions] = useState<PinOption[]>([]);
     const [hygrometerOptions, setHygrometerOptions] = useState<PinOption[]>([]);
     const [heatingOptions, setHeatingOptions] = useState<PinOption[]>([]);
     const [waterOptions, setWaterOptions] = useState<PinOption[]>([]);
+    const [probeOptions, setProbeOptions] = useState<PinOption[]>([]);
 
-    // Dropdown open states for pins
     const [thermometerDropdownOpen, setThermometerDropdownOpen] = useState(false);
     const [hygrometerDropdownOpen, setHygrometerDropdownOpen] = useState(false);
     const [heatingDropdownOpen, setHeatingDropdownOpen] = useState(false);
     const [waterDropdownOpen, setWaterDropdownOpen] = useState(false);
-
-    const formItems = [
-        'name',
-        'type',
-        'temperature_goal',
-        'humidity_goal',
-        'max_temp',
-        'min_temp',
-        'max_hum',
-        'min_hum',
-        'water_time',
-        'water_period',
-    ];
+    const [probeDropdownOpen, setProbeDropdownOpen] = useState(false);
 
     const fetchPins = async (functionType: string, setOptions: React.Dispatch<React.SetStateAction<any[]>>) => {
         try {
-            const response = await fetch(
-                `http://212.47.71.180:8080/pins/${userId}/${functionType}`
-            );
+            const response = await fetch(`http://212.47.71.180:8080/pins/${userId}/${functionType}`);
             if (!response.ok) {
                 throw new Error('Failed to fetch pins');
             }
             const data = await response.json();
             setOptions(data.map((pin: any) => ({ label: `Pin ${pin.id}`, value: pin.id })));
         } catch (error) {
-            if (error instanceof Error) {
-                console.error(error.message);
-                Alert.alert('Error', `Failed to fetch pins for ${functionType}: ${error.message}`);
-            } else {
-                console.error('Unknown error occurred:', error);
-                Alert.alert('Error', `Failed to fetch pins for ${functionType}: Unknown error`);
-            }
+            Alert.alert('Error', `Failed to fetch pins for ${functionType}`);
         }
     };
 
-
-
     useEffect(() => {
-        if (step === 2) {
-            // Fetch available pins for each function when on Page 2
+        if (step === 3) {
             fetchPins('t1', setThermometerOptions);
             fetchPins('t2', setHygrometerOptions);
             fetchPins('pwm', setHeatingOptions);
-            if (terrariumDetails.type === 'lamp_mist') fetchPins('water', setWaterOptions);
+            fetchPins('probe', setProbeOptions);
+            if (terrariumDetails.shouldWater) {
+                fetchPins('water', setWaterOptions);
+            }
         }
-    }, [step, terrariumDetails.type]);
+    }, [step, terrariumDetails.shouldWater]);
 
-    // Update terrarium details dynamically
     const updateTerrariumDetail = (field: keyof TerrariumDetails, value: any) => {
-        setTerrariumDetails((prev) => ({
+        setTerrariumDetails(prev => ({
             ...prev,
             [field]: value,
         }));
     };
 
-    const handleTimeChange = (event: any, selectedTime: Date | undefined) => {
-        setShowTimePicker(false); // Close the picker
-        if (selectedTime) {
-            updateTerrariumDetail('water_time', selectedTime);
-        }
+    // Helper to format Date to "HH:mm:ss"
+    const formatTime = (date: Date): string => {
+        const hours = date.getHours().toString().padStart(2, '0');
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+        const seconds = date.getSeconds().toString().padStart(2, '0');
+        return `${hours}:${minutes}:${seconds}`;
+    };
+
+    // Helper to parse a locale float (handles comma as decimal separator)
+    const parseLocaleFloat = (value: string): number => {
+        return parseFloat(value.replace(',', '.'));
+    };
+
+    const handleConfirmTime = (date: Date) => {
+        updateTerrariumDetail('water_time', date);
+        setDatePickerVisibility(false);
+    };
+
+    const handleCancelTime = () => {
+        setDatePickerVisibility(false);
     };
 
     const handleNext = () => {
-        if (step === 1) {
-            // Validation for Step 1
-            if (!terrariumDetails.name.trim()) {
-                Alert.alert('Error', 'Name is required.');
-                return;
-            }
-            if (!terrariumDetails.type) {
-                Alert.alert('Error', 'Terrarium type is required.');
-                return;
-            }
-            setStep(2);
-        }
+        setStep(prev => prev + 1);
     };
 
     const handlePrevious = () => {
-        setStep(1);
+        setStep(prev => prev - 1);
     };
 
-    const handleSubmit = () => {
-        console.log('Terrarium to be submitted:', terrariumDetails);
-        Alert.alert('Success', 'Terrarium created successfully!');
-    };
+    // Final submission: Build DTOs and POST to backend endpoints.
+    // After a successful submission and pin assignment, reset the form.
+    const handleSubmit = async () => {
+        // Build payload for /add endpoint according to TerrariumDisplayDTO
+        const payload = {
+            user_id: userId,
+            name: terrariumDetails.name,
+            temperature_goal: parseLocaleFloat(terrariumDetails.temperature_goal),
+            humidity_goal: parseLocaleFloat(terrariumDetails.humidity_goal),
+            max_temp: parseLocaleFloat(terrariumDetails.max_temp),
+            min_temp: parseLocaleFloat(terrariumDetails.min_temp),
+            max_hum: parseLocaleFloat(terrariumDetails.max_hum),
+            min_hum: parseLocaleFloat(terrariumDetails.min_hum),
+            water_time:
+                terrariumDetails.shouldWater && terrariumDetails.water_time
+                    ? formatTime(terrariumDetails.water_time)
+                    : null,
+            water_period: terrariumDetails.shouldWater
+                ? parseInt(terrariumDetails.water_duration.replace(',', '.'))
+                : null,
+        };
 
-    const renderFormItem = ({ item }: { item: string }) => {
-        switch (item) {
-            case 'name':
-            case 'temperature_goal':
-            case 'humidity_goal':
-            case 'max_temp':
-            case 'min_temp':
-            case 'max_hum':
-            case 'min_hum':
-                return (
-                    <View style={styles.formItem}>
-                        <Text style={styles.label}>{item.replace('_', ' ').toUpperCase()}</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={(terrariumDetails[item as keyof TerrariumDetails] as string) || ''}
-                            onChangeText={(value) =>
-                                updateTerrariumDetail(item as keyof TerrariumDetails, value)
-                            }
-                            placeholder={`Enter ${item.replace('_', ' ')}`}
-                            keyboardType={
-                                item.includes('temp') || item.includes('hum') ? 'numeric' : 'default'
-                            }
-                        />
-                    </View>
-                );
-            case 'type':
-                return (
-                    <View style={styles.formItem}>
-                        <Text style={styles.label}>Type</Text>
-                        <DropDownPicker
-                            open={typeDropdownOpen}
-                            value={terrariumDetails.type}
-                            items={[
-                                { label: 'Lamp', value: 'lamp' },
-                                { label: 'Mat', value: 'mat' },
-                                { label: 'Lamp with Mist', value: 'lamp_mist' },
-                            ]}
-                            setOpen={setTypeDropdownOpen}
-                            setValue={(callback) => {
-                                const selectedValue = callback(terrariumDetails.type);
-                                updateTerrariumDetail('type', selectedValue);
+        try {
+            // POST to /add endpoint
+            const response = await fetch('http://212.47.71.180:8080/terrariums/add', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload),
+            });
+            if (response.ok) {
+                const responseText = await response.text();
+                Alert.alert('Success', 'Terrarium created successfully!');
+                // Extract terrarium ID from response text.
+                // Assumes response text in the form "Terrarium saved with ID: X"
+                const terrariumId = parseInt(responseText.split(':')[1].trim());
 
-                                // Reset water-related fields if type changes to non-lamp_mist
-                                if (selectedValue !== 'lamp_mist') {
-                                    updateTerrariumDetail('water_time', null);
-                                    updateTerrariumDetail('water_period', '');
-                                }
-                            }}
-                            placeholder="Select Type"
-                            style={styles.dropdown}
-                            dropDownContainerStyle={styles.dropdownContainer}
-                            zIndex={typeDropdownOpen ? 1000 : 1}
-                        />
-                    </View>
-                );
-            case 'water_time':
-                return (
-                    terrariumDetails.type === 'lamp_mist' && (
-                        <View style={styles.formItem}>
-                            <Text style={styles.label}>Water Time (Optional)</Text>
-                            {terrariumDetails.water_time && (
-                                <Text style={styles.timeText}>
-                                    Selected Time:{' '}
-                                    {terrariumDetails.water_time
-                                        ?.toTimeString()
-                                        .slice(0, 5) || ''}
-                                </Text>
-                            )}
-                            <Button
-                                title="Pick Water Time"
-                                onPress={() => setShowTimePicker(true)}
-                            />
-                            {showTimePicker && (
-                                <DateTimePicker
-                                    value={terrariumDetails.water_time || new Date()}
-                                    mode="time"
-                                    display="default"
-                                    onChange={handleTimeChange}
-                                />
-                            )}
-                        </View>
-                    )
-                );
-            case 'water_period':
-                return (
-                    terrariumDetails.type === 'lamp_mist' && (
-                        <View style={styles.formItem}>
-                            <Text style={styles.label}>Water Period (Optional, seconds)</Text>
-                            <TextInput
-                                style={styles.input}
-                                value={terrariumDetails.water_period || ''}
-                                onChangeText={(value) =>
-                                    updateTerrariumDetail('water_period', value)
-                                }
-                                placeholder="Enter water period"
-                                keyboardType="numeric"
-                            />
-                        </View>
-                    )
-                );
-            default:
-                return null; // Ensure no crash for unsupported items
+                // Build payload for /assign endpoint using the updated mapping
+                const pinPayload = {
+                    terrarium_id: terrariumId,
+                    probe_pin: pins.probe,                 // New probe pin from step 3
+                    t1_pin: pins.thermometer,              // Thermometer becomes t1
+                    t2_pin: pins.hygrometer,               // Hygrometer becomes t2
+                    pwm_pin: pins.heating,                 // Heating becomes pwm
+                    water_pin: terrariumDetails.shouldWater ? pins.water : null,
+                };
+
+                // POST to /assign endpoint
+                const assignResponse = await fetch('http://212.47.71.180:8080/pins/assign', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(pinPayload),
+                });
+                if (!assignResponse.ok) {
+                    const assignErrorText = await assignResponse.text();
+                    Alert.alert('Error', 'Failed to assign pins: ' + assignErrorText);
+                } else {
+                    const assignResponseText = await assignResponse.text();
+                    console.log('Pin assignment response:', assignResponseText);
+                }
+
+                // Reset form state after submission
+                setTerrariumDetails(initialTerrariumDetails);
+                setPins(initialPins);
+                setStep(1);
+            } else {
+                const errorText = await response.text();
+                Alert.alert('Error', 'Failed to create terrarium: ' + errorText);
+            }
+        } catch (error: any) {
+            Alert.alert('Error', 'Failed to create terrarium: ' + error.message);
         }
     };
 
 
-    return (
-        <View style={styles.container}>
-            {step === 1 && (
-                <FlatList
-                    data={formItems}
-                    keyExtractor={(item) => item}
-                    renderItem={(item) => renderFormItem(item) || null}
-                    ListFooterComponent={<Button title="Next" onPress={handleNext} />}
-                />
-            )}
-            {step === 2 && (
-                <View>
-                    <Text style={styles.title}>Assign Pins - Step 2</Text>
+    // STEP 1: Basic details & watering options
+    const renderStepOne = () => {
+        const validateStepOne = () => {
+            if (!terrariumDetails.name.trim()) {
+                Alert.alert('Błąd', 'Należy wpisać nazwę terrarium');
+                return false;
+            }
+            const tempGoal = parseLocaleFloat(terrariumDetails.temperature_goal);
+            if (isNaN(tempGoal) || tempGoal < 10 || tempGoal > 90) {
+                Alert.alert('Błąd', 'Temperatura musi być większa od 10°C i mniejsza niż 90°C');
+                return false;
+            }
+            const humGoal = parseLocaleFloat(terrariumDetails.humidity_goal);
+            if (isNaN(humGoal) || humGoal < 0 || humGoal > 100) {
+                Alert.alert('Błąd', 'Wilgotność musi być większa od 0% i mniejsza niż 100%');
+                return false;
+            }
+            if (terrariumDetails.shouldWater) {
+                if (!terrariumDetails.water_time) {
+                    Alert.alert('Błąd', 'Przy sterowanie wodą, należy podać godzinę startu');
+                    return false;
+                }
+                if (!terrariumDetails.water_duration.trim()) {
+                    Alert.alert('Błąd', 'Przy sterowaniu wodą należy podać czas trwania');
+                    return false;
+                }
+            }
+            return true;
+        };
 
-                    {/* Thermometer Pin Dropdown */}
-                    <Text style={styles.label}>Thermometer Pin</Text>
+        return (
+            <FlatList
+                keyboardShouldPersistTaps="handled"
+                data={[1]} // dummy data; form is rendered via ListHeaderComponent
+                renderItem={() => null}
+                ListHeaderComponent={
+                    <View>
+                        <View style={styles.formItem}>
+                            <View style={styles.labelContainer}>
+                                <Text style={styles.label}>Nazwa terrarium</Text>
+                            </View>
+                            <TextInput
+                                style={styles.input}
+                                value={terrariumDetails.name}
+                                onChangeText={(value) => updateTerrariumDetail('name', value)}
+                                placeholder="Wprowadź nazwę"
+                            />
+                        </View>
+                        <View style={styles.formItem}>
+                            <View style={styles.labelContainer}>
+                                <Text style={styles.label}>Temperatura - cel</Text>
+                            </View>
+                            <TextInput
+                                style={styles.input}
+                                value={terrariumDetails.temperature_goal}
+                                onChangeText={(value) => updateTerrariumDetail('temperature_goal', value)}
+                                placeholder="Wprowadź temperaturę"
+                                keyboardType="numeric"
+                            />
+                        </View>
+                        <View style={styles.formItem}>
+                            <View style={styles.labelContainer}>
+                                <Text style={styles.label}>Wilgotność - cel</Text>
+                            </View>
+                            <TextInput
+                                style={styles.input}
+                                value={terrariumDetails.humidity_goal}
+                                onChangeText={(value) => updateTerrariumDetail('humidity_goal', value)}
+                                placeholder="Enter humidity goal"
+                                keyboardType="numeric"
+                            />
+                        </View>
+                        <View style={styles.formItem}>
+                            <View style={styles.labelContainer}>
+                                <Text style={styles.label}>Sterowanie wodą w terrarium?</Text>
+                            </View>
+                            <Switch
+                                value={terrariumDetails.shouldWater}
+                                onValueChange={(value) => updateTerrariumDetail('shouldWater', value)}
+                            />
+                        </View>
+                        {terrariumDetails.shouldWater && (
+                            <>
+                                <View style={styles.formItem}>
+                                    <View style={styles.labelContainer}>
+                                        <Text style={styles.label}>Godzina dolewania wody</Text>
+                                    </View>
+                                    <TouchableOpacity
+                                        onPress={() => setDatePickerVisibility(true)}
+                                        style={styles.timePickerButton}
+                                    >
+                                        <Text style={styles.timePickerText}>
+                                            {terrariumDetails.water_time
+                                                ? terrariumDetails.water_time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                                : 'Set Water Time'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                    <DateTimePickerModal
+                                        isVisible={isDatePickerVisible}
+                                        mode="time"
+                                        onConfirm={handleConfirmTime}
+                                        onCancel={handleCancelTime}
+                                    />
+                                </View>
+                                <View style={styles.formItem}>
+                                    <View style={styles.labelContainer}>
+                                        <Text style={styles.label}>Czas trwania dolewania wody (sekundy)</Text>
+                                    </View>
+                                    <TextInput
+                                        style={styles.input}
+                                        value={terrariumDetails.water_duration}
+                                        onChangeText={(value) => updateTerrariumDetail('water_duration', value)}
+                                        placeholder="Enter water duration in minutes"
+                                        keyboardType="numeric"
+                                    />
+                                </View>
+                            </>
+                        )}
+                        <TouchableOpacity
+                            style={styles.button}
+                            onPress={() => {
+                                if (validateStepOne()) handleNext();
+                            }}
+                        >
+                            <Text style={styles.buttonText}>Dalej</Text>
+                        </TouchableOpacity>
+                    </View>
+                }
+            />
+        );
+    };
+
+    // STEP 2: Temperature and humidity ranges
+    const renderStepTwo = () => {
+        const validateStepTwo = () => {
+            if (!terrariumDetails.max_temp.trim()) {
+                Alert.alert('Błąd', 'Trzeba podać maksymalną temperaturę');
+                return false;
+            }
+            if (!terrariumDetails.min_temp.trim()) {
+                Alert.alert('Błąd', 'Trzeba podać minimalną temperaturę');
+                return false;
+            }
+            if (!terrariumDetails.max_hum.trim()) {
+                Alert.alert('Błąd', 'Trzeba podać maksymalną wilgotność');
+                return false;
+            }
+            if (!terrariumDetails.min_hum.trim()) {
+                Alert.alert('Błąd', 'Trzeba podać minimalną wilgotność');
+                return false;
+            }
+
+            const minTemp = parseLocaleFloat(terrariumDetails.min_temp);
+            const maxTemp = parseLocaleFloat(terrariumDetails.max_temp);
+            const tempGoal = parseLocaleFloat(terrariumDetails.temperature_goal);
+
+            if (isNaN(minTemp) || minTemp <= 0 || minTemp >= tempGoal) {
+                Alert.alert('Błąd', `Minimalna temperatura musi być większa niż 0 i mniejsza niż (${tempGoal}°C).`);
+                return false;
+            }
+            if (isNaN(maxTemp) || maxTemp <= tempGoal || maxTemp >= 100) {
+                Alert.alert('Błąd', `Maksymalna temperatura musi być większa niż (${tempGoal}°C) i mniejsza od 100°C.`);
+                return false;
+            }
+
+            const minHum = parseLocaleFloat(terrariumDetails.min_hum);
+            const maxHum = parseLocaleFloat(terrariumDetails.max_hum);
+            const humGoal = parseLocaleFloat(terrariumDetails.humidity_goal);
+
+            if (isNaN(minHum) || minHum <= 0 || minHum >= humGoal) {
+                Alert.alert('Błąd', `Minimalna wilgotność musi być większa niż 0 i mniejsza niż (${humGoal}%).`);
+                return false;
+            }
+            if (isNaN(maxHum) || maxHum <= humGoal || maxHum >= 100) {
+                Alert.alert('Błąd', `Maksymalna wilgotność musi być większa niż (${humGoal}%) i mniejsza od 100%.`);
+                return false;
+            }
+
+            return true;
+        };
+
+        return (
+            <FlatList
+                keyboardShouldPersistTaps="handled"
+                data={['max_temp', 'min_temp', 'max_hum', 'min_hum']}
+                keyExtractor={(item) => item}
+                renderItem={({ item }) => (
+                    <View style={styles.formItem}>
+                        <View style={styles.labelContainer}>
+                            <Text style={styles.label}>{item.replace('_', ' ').toUpperCase()}</Text>
+                        </View>
+                        <TextInput
+                            style={styles.input}
+                            value={(terrariumDetails[item as keyof TerrariumDetails] as string) || ''}
+                            onChangeText={(value) => updateTerrariumDetail(item as keyof TerrariumDetails, value)}
+                            placeholder={`Enter ${item.replace('_', ' ')}`}
+                            keyboardType="numeric"
+                        />
+                    </View>
+                )}
+                ListFooterComponent={
+                    <View style={styles.buttonRow}>
+                        <TouchableOpacity style={styles.button} onPress={handlePrevious}>
+                            <Text style={styles.buttonText}>Wstecz</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.button} onPress={() => { if (validateStepTwo()) handleNext(); }}>
+                            <Text style={styles.buttonText}>Dalej</Text>
+                        </TouchableOpacity>
+                    </View>
+                }
+            />
+        );
+    };
+
+    // STEP 3: Pin assignment
+    const renderStepThree = () => {
+        const validateStepThree = () => {
+            if (!pins.probe) {
+                Alert.alert('Błąd', 'Brak pinu termostatu.');
+                return false;
+            }
+            if (!pins.thermometer) {
+                Alert.alert('Błąd', 'Brak pinu termometru 1');
+                return false;
+            }
+            if (!pins.hygrometer) {
+                Alert.alert('Błąd', 'Brak pinu termometru 2');
+                return false;
+            }
+            if (!pins.heating) {
+                Alert.alert('Błąd', 'Brak pinu zasilania ogrzewania');
+                return false;
+            }
+            if (terrariumDetails.shouldWater && !pins.water) {
+                Alert.alert('Błąd', 'Brak pinu sterowania wodą');
+                return false;
+            }
+            return true;
+        };
+
+        return (
+            <View>
+                <View style={styles.overlay} />
+                <View style={styles.titleContainer}>
+                    <Text style={styles.titleText}>Przypisanie pinów</Text>
+                </View>
+
+                {/* Probe Pin */}
+                <View style={styles.formItem}>
+                    <View style={styles.labelContainer}>
+                        <Text style={styles.label}>Pin termostatu</Text>
+                    </View>
+                    <DropDownPicker
+                        open={probeDropdownOpen}
+                        value={pins.probe}
+                        items={probeOptions}
+                        setOpen={setProbeDropdownOpen}
+                        setValue={(callback) =>
+                            setPins(prev => ({
+                                ...prev,
+                                probe: callback(prev.probe),
+                            }))
+                        }
+                        placeholder="Wybierz pin termostatu"
+                        style={styles.dropdown}
+                        dropDownContainerStyle={styles.dropdownContainer}
+                        zIndex={1100}
+                    />
+                </View>
+
+                {/* Thermometer Pin */}
+                <View style={styles.formItem}>
+                    <View style={styles.labelContainer}>
+                        <Text style={styles.label}>Pin termometru 1</Text>
+                    </View>
                     <DropDownPicker
                         open={thermometerDropdownOpen}
                         value={pins.thermometer}
                         items={thermometerOptions}
                         setOpen={setThermometerDropdownOpen}
                         setValue={(callback) =>
-                            setPins((prev) => ({
+                            setPins(prev => ({
                                 ...prev,
                                 thermometer: callback(prev.thermometer),
                             }))
                         }
-                        placeholder="Select Thermometer Pin"
+                        placeholder="Wybierz pin termometru 1"
                         style={styles.dropdown}
                         dropDownContainerStyle={styles.dropdownContainer}
                         zIndex={1000}
                     />
+                </View>
 
-                    {/* Hygrometer Pin Dropdown */}
-                    <Text style={styles.label}>Hygrometer Pin</Text>
+                {/* Hygrometer Pin */}
+                <View style={styles.formItem}>
+                    <View style={styles.labelContainer}>
+                        <Text style={styles.label}>Pin termometru 2</Text>
+                    </View>
                     <DropDownPicker
                         open={hygrometerDropdownOpen}
                         value={pins.hygrometer}
                         items={hygrometerOptions}
                         setOpen={setHygrometerDropdownOpen}
                         setValue={(callback) =>
-                            setPins((prev) => ({
+                            setPins(prev => ({
                                 ...prev,
                                 hygrometer: callback(prev.hygrometer),
                             }))
                         }
-                        placeholder="Select Hygrometer Pin"
+                        placeholder="Wybierz pin termometru 2"
                         style={styles.dropdown}
                         dropDownContainerStyle={styles.dropdownContainer}
                         zIndex={900}
                     />
+                </View>
 
-                    {/* Heating Pin Dropdown */}
-                    <Text style={styles.label}>Heating Pin</Text>
+                {/* Heating Pin */}
+                <View style={styles.formItem}>
+                    <View style={styles.labelContainer}>
+                        <Text style={styles.label}>Pin ogrzewania</Text>
+                    </View>
                     <DropDownPicker
                         open={heatingDropdownOpen}
                         value={pins.heating}
                         items={heatingOptions}
                         setOpen={setHeatingDropdownOpen}
                         setValue={(callback) =>
-                            setPins((prev) => ({
+                            setPins(prev => ({
                                 ...prev,
                                 heating: callback(prev.heating),
                             }))
                         }
-                        placeholder="Select Heating Pin"
+                        placeholder="Wybierz pin ogrzewania"
                         style={styles.dropdown}
                         dropDownContainerStyle={styles.dropdownContainer}
                         zIndex={800}
                     />
-
-                    {/* Optional Water Pin Dropdown */}
-                    {terrariumDetails.type === 'lamp_mist' && (
-                        <>
-                            <Text style={styles.label}>Water Pin</Text>
-                            <DropDownPicker
-                                open={waterDropdownOpen}
-                                value={pins.water} // Ensure this is of type number | null
-                                items={waterOptions}
-                                setOpen={setWaterDropdownOpen}
-                                setValue={(callback) =>
-                                    setPins((prev) => ({
-                                        ...prev,
-                                        water: callback(prev.water), // Correctly apply the callback to maintain type compatibility
-                                    }))
-                                }
-                                placeholder="Select Water Pin"
-                                style={styles.dropdown}
-                                dropDownContainerStyle={styles.dropdownContainer}
-                                zIndex={700}
-                            />
-
-                        </>
-                    )}
-
-                    {/* Navigation Buttons */}
-                    <View style={styles.buttonRow}>
-                        <Button title="Previous" onPress={handlePrevious} />
-                        <Button title="Submit" onPress={handleSubmit} />
-                    </View>
                 </View>
-            )}
 
-        </View>
+                {/* Water Pin (if watering is enabled) */}
+                {terrariumDetails.shouldWater && (
+                    <View style={styles.formItem}>
+                        <View style={styles.labelContainer}>
+                            <Text style={styles.label}>Pin sterowania wodą</Text>
+                        </View>
+                        <DropDownPicker
+                            open={waterDropdownOpen}
+                            value={pins.water}
+                            items={waterOptions}
+                            setOpen={setWaterDropdownOpen}
+                            setValue={(callback) =>
+                                setPins(prev => ({
+                                    ...prev,
+                                    water: callback(prev.water),
+                                }))
+                            }
+                            placeholder="Wybierz pin sterowania wodą"
+                            style={styles.dropdown}
+                            dropDownContainerStyle={styles.dropdownContainer}
+                            zIndex={700}
+                        />
+                    </View>
+                )}
+
+                <View style={styles.buttonRow}>
+                    <TouchableOpacity style={styles.button} onPress={handlePrevious}>
+                        <Text style={styles.buttonText}>Wstecz</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.button}
+                        onPress={() => {
+                            if (validateStepThree()) handleSubmit();
+                        }}
+                    >
+                        <Text style={styles.buttonText}>Dodaj</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        );
+    };
+
+
+    return (
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <ImageBackground
+                source={require('../app/app_tabs/backround_image.jpg')}
+                style={styles.background}
+                resizeMode="cover"
+            >
+                <View style={styles.overlay} />
+                <View style={styles.container}>
+                    {step === 1 && renderStepOne()}
+                    {step === 2 && renderStepTwo()}
+                    {step === 3 && renderStepThree()}
+                </View>
+            </ImageBackground>
+        </TouchableWithoutFeedback>
     );
 };
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        padding: 20,
+    background: { flex: 1 },
+    overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255, 255, 255, 0.3)' },
+    container: { flex: 1, padding: 20 },
+    formItem: { marginBottom: 20 },
+    labelContainer: {
         backgroundColor: '#fff',
-    },
-    formItem: {
-        marginBottom: 20,
-    },
-    label: {
-        fontSize: 16,
+        paddingHorizontal: 5,
+        borderRadius: 5,
+        alignSelf: 'flex-start',
         marginBottom: 5,
     },
-    input: {
-        borderWidth: 1,
-        borderColor: '#ccc',
-        borderRadius: 5,
-        padding: 10,
-        fontSize: 16,
-    },
-    dropdown: {
-        marginVertical: 10,
-        backgroundColor: '#fff',
-        borderColor: '#ccc',
-        borderRadius: 5,
-    },
-    dropdownContainer: {
-        backgroundColor: '#fff',
-        borderColor: '#ccc',
-    },
-    timeText: {
-        fontSize: 14,
+    titleContainer: {
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        padding: 15,
+        alignItems: 'center',
+        borderBottomLeftRadius: 10,
+        borderBottomRightRadius: 10,
         marginBottom: 10,
     },
-    title: {
+    titleText: {
         fontSize: 24,
         fontWeight: 'bold',
-        marginBottom: 20,
-        textAlign: 'center',
+        color: '#fff',
     },
-    buttonRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginTop: 20,
-    },
+    label: { fontSize: 14, fontWeight: 'bold', color: '#333' },
+    input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 5, padding: 10, backgroundColor: '#fff' },
+    dropdown: { marginVertical: 10 },
+    dropdownContainer: { backgroundColor: '#fff' },
+    timePickerButton: { backgroundColor: '#fff', padding: 10 },
+    timePickerText: { color: '#333' },
+    button: { backgroundColor: '#4CAF50', padding: 10, borderRadius: 5, marginVertical: 10 },
+    buttonText: { fontWeight: 'bold', textAlign: 'center', color: '#fff' },
+    buttonRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 },
+    title: { fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 20 },
 });
 
 export default AddTerrariumScreen;

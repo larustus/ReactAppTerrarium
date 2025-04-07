@@ -30,30 +30,32 @@ const TabsLayout: React.FC = () => {
                         },
                         tabBarActiveTintColor: '#42a5f5', // Active icon color
                         tabBarInactiveTintColor: '#757575', // Inactive icon color
+                        headerShown: false, // Disable header for all tabs
                     })}
                 >
-                    <Tabs.Screen
+
+                <Tabs.Screen
                         name="index"
                         options={{
-                            tabBarLabel: 'Home',
+                            tabBarLabel: 'Lista terrariów',
                         }}
                     />
                     <Tabs.Screen
                         name="statistics"
                         options={{
-                            tabBarLabel: 'Statistics',
+                            tabBarLabel: 'Statystyki',
                         }}
                     />
                     <Tabs.Screen
                         name="add"
                         options={{
-                            tabBarLabel: 'Add Terrarium',
+                            tabBarLabel: 'Dodaj terrarium',
                         }}
                     />
                     <Tabs.Screen
                         name="alarms"
                         options={{
-                            tabBarLabel: 'Alarms',
+                            tabBarLabel: 'Alarmy',
                         }}
                     />
                 </Tabs>
