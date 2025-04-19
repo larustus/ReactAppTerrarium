@@ -50,7 +50,7 @@ const StatisticsScreen: React.FC = () => {
     useEffect(() => {
         const fetchTerrariums = async () => {
             try {
-                const response = await fetch("http://212.47.71.180:8080/terrariums/user/1");
+                const response = await fetch("http://212.47.71.180:8080/terrariums/user/id/1");
                 if (!response.ok) throw new Error("Failed to fetch terrariums");
                 const data: TerrariumData[] = await response.json();
                 setTerrariums(data);
@@ -105,6 +105,7 @@ const StatisticsScreen: React.FC = () => {
         labels: Array.from({ length: 24 }, (_, i) =>
             [0, 6, 12, 18].includes(i) ? i.toString().padStart(2, "0") : ""
         ),
+
         datasets: [
             {
                 data: hourlyReadings.map((reading) => reading[selectedMetric] ?? 0),
@@ -114,7 +115,7 @@ const StatisticsScreen: React.FC = () => {
 
     return (
         <ImageBackground
-            source={require("../app/app_tabs/backround_image.jpg")}
+            source={require("./app_tabs/background_image.png")}
             style={styles.background}
             resizeMode="cover"
         >
@@ -186,7 +187,8 @@ const StatisticsScreen: React.FC = () => {
                             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                                 <BarChart
                                     data={chartData}
-                                    width={Dimensions.get("window").width * 2}
+                                    //width={Dimensions.get("window").width * 2}
+                                    width={Dimensions.get("window").width - 20}
                                     height={300}
                                     yAxisLabel=""
                                     yAxisSuffix={selectedMetric === "humidity" ? "%" : "°C"}

@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import DropDownPicker from 'react-native-dropdown-picker';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
+import { ScrollView } from 'react-native';
 
 interface TerrariumDetails {
     name: string;
@@ -253,12 +254,17 @@ const AddTerrariumScreen: React.FC = () => {
         };
 
         return (
+
             <FlatList
                 keyboardShouldPersistTaps="handled"
                 data={[1]} // dummy data; form is rendered via ListHeaderComponent
                 renderItem={() => null}
                 ListHeaderComponent={
                     <View>
+                        <View style={styles.overlay} />
+                        <View style={styles.titleContainer}>
+                            <Text style={styles.titleText}>Przypisanie pinów</Text>
+                        </View>
                         <View style={styles.formItem}>
                             <View style={styles.labelContainer}>
                                 <Text style={styles.label}>Nazwa terrarium</Text>
@@ -464,10 +470,10 @@ const AddTerrariumScreen: React.FC = () => {
 
         return (
             <View>
-                <View style={styles.overlay} />
-                <View style={styles.titleContainer}>
-                    <Text style={styles.titleText}>Przypisanie pinów</Text>
-                </View>
+                {/*<View style={styles.overlay} />*/}
+                {/*<View style={styles.titleContainer}>*/}
+                {/*    <Text style={styles.titleText}>Przypisanie pinów</Text>*/}
+                {/*</View>*/}
 
                 {/* Probe Pin */}
                 <View style={styles.formItem}>
@@ -599,6 +605,7 @@ const AddTerrariumScreen: React.FC = () => {
                         <Text style={styles.buttonText}>Dodaj</Text>
                     </TouchableOpacity>
                 </View>
+
             </View>
         );
     };
@@ -607,7 +614,7 @@ const AddTerrariumScreen: React.FC = () => {
     return (
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <ImageBackground
-                source={require('../app/app_tabs/backround_image.jpg')}
+                source={require('./app_tabs/background_image.png')}
                 style={styles.background}
                 resizeMode="cover"
             >

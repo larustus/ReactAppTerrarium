@@ -17,6 +17,9 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Slider from '@react-native-community/slider'
+import DateTimePicker from "@react-native-community/datetimepicker";
+import DateTimePickerModal from "react-native-modal-datetime-picker";
+
 
 interface TerrariumData {
     id: number;
@@ -64,6 +67,9 @@ const MultiTerrariumScreen: React.FC = () => {
     // New state for fetched humidity goal
     const [fetchedHumGoal, setFetchedHumGoal] = useState<number>(0);
 
+    const [showTimePicker, setShowTimePicker] = useState(false);
+    const [selectedTime, setSelectedTime] = useState<Date | null>(null);
+
     const ws = useRef<WebSocket | null>(null);
 
     useEffect(() => {
@@ -74,6 +80,7 @@ const MultiTerrariumScreen: React.FC = () => {
         };
 
         ws.current.onmessage = (event) => {
+            console.log("📦 Message received from WebSocket:", event.data);
             const updatedTerrariums: TerrariumData[] = JSON.parse(event.data);
             setTerrariums(updatedTerrariums);
             setLoading(false);
@@ -119,10 +126,42 @@ const MultiTerrariumScreen: React.FC = () => {
 
     const openWaterModal = (terrarium: TerrariumData) => {
         setSelectedTerrarium(terrarium);
-        setWaterTime('');
-        setWaterPeriod('');
+        setWaterTime(terrarium.water_time ?? '');
+        setWaterPeriod(terrarium.water_period?.toString() ?? '');
         setWaterModalVisible(true);
     };
+
+    const deleteTerrarium = async (id: number) => {
+        try {
+            const res = await fetch(`http://212.47.71.180:8080/terrariums/remove/${id}`, {
+                method: 'DELETE'
+            });
+
+            if (res.ok) {
+                setTerrariums(prev => prev.filter(t => t.id !== id));
+                Alert.alert("Sukces", "Terrarium zostało usunięte.");
+            } else {
+                const msg = await res.text();
+                Alert.alert("Błąd", `Nie udało się usunąć terrarium: ${msg}`);
+            }
+        } catch (error) {
+            console.error("Error deleting terrarium:", error);
+            Alert.alert("Błąd", "Wystąpił problem podczas usuwania terrarium.");
+        }
+    };
+
+
+    const confirmDeleteTerrarium = (id: number) => {
+        Alert.alert(
+            "Usuń terrarium",
+            "Czy na pewno chcesz usunąć to terrarium?",
+            [
+                { text: "Anuluj", style: "cancel" },
+                { text: "Usuń", style: "destructive", onPress: () => deleteTerrarium(id) }
+            ]
+        );
+    };
+
 
     // Handle save for all modals
     const handleSave = async (field: string, value: string) => {
@@ -166,11 +205,11 @@ const MultiTerrariumScreen: React.FC = () => {
 
             const updated = await response.json();
 
-            Alert.alert("Success", `${field} updated successfully.`);
+            Alert.alert("Sukces", `Zaktualizowano ${field} `);
             console.log("Updated Terrarium:", updated);
         } catch (error) {
             console.error(error);
-            Alert.alert("Error", `Failed to update ${field}`);
+            Alert.alert("Błąd", `Nie udało się zaktualizować ${field}`);
         }
     };
 
@@ -193,7 +232,7 @@ const MultiTerrariumScreen: React.FC = () => {
 
     return (
         <ImageBackground
-            source={require('../app/app_tabs/backround_image.jpg')}
+            source={require('./app_tabs/background_image.png')}
             style={styles.background}
             resizeMode="cover"
         >
@@ -242,6 +281,9 @@ const MultiTerrariumScreen: React.FC = () => {
                         <View style={styles.terrariumCard}>
                             <View style={styles.row}>
                                 <Text style={styles.nameText}>{name}</Text>
+                                <TouchableOpacity onPress={() => confirmDeleteTerrarium(item.id)}>
+                                    <Icon name="close-circle" size={24} color="#f44336" />
+                                </TouchableOpacity>
                             </View>
                             <View style={styles.row}>
                                 <Icon name="thermometer" size={24} color="#ff5722" />
@@ -301,14 +343,15 @@ const MultiTerrariumScreen: React.FC = () => {
                                     <Icon name="thermometer-lines" size={24} color="#fff" />
                                 </TouchableOpacity>
 
-                                {/*{type === 'lamp_water' && (*/}
-                                {/*    <TouchableOpacity*/}
-                                {/*        onPress={() => openWaterModal(item)}*/}
-                                {/*        style={styles.iconButton}*/}
-                                {/*    >*/}
-                                {/*        <Icon name="water-outline" size={24} color="#fff" />*/}
-                                {/*    </TouchableOpacity>*/}
-                                {/*)}*/}
+                                {item.water_time && item.water_period && (
+                                    <TouchableOpacity
+                                        onPress={() => openWaterModal(item)}
+                                        style={styles.iconButton}
+                                    >
+                                        <Icon name="water-outline" size={24} color="#fff" />
+                                    </TouchableOpacity>
+                                )}
+
                             </View>
                         </View>
                     );
@@ -321,7 +364,7 @@ const MultiTerrariumScreen: React.FC = () => {
             <Modal visible={generalModalVisible} animationType="slide" transparent>
                 <View style={styles.modalContainer}>
                     <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Edit General Settings</Text>
+                        <Text style={styles.modalTitle}>Zmiana wartości ogólnych</Text>
                         <Slider
                             style={styles.slider}
                             minimumValue={15}
@@ -330,12 +373,12 @@ const MultiTerrariumScreen: React.FC = () => {
                             value={tempGoal}
                             onValueChange={setTempGoal}
                         />
-                        <Text style={styles.label}>Temperature Goal: {tempGoal.toFixed(1)}°C</Text>
+                        <Text style={styles.label}>Wartość zadana temperatury: {tempGoal.toFixed(1)}°C</Text>
                         <TouchableOpacity
                             style={styles.saveButton}
                             onPress={() => handleSave('Temperature Goal', String(tempGoal))}
                         >
-                            <Text style={styles.saveText}>Save Temp Goal</Text>
+                            <Text style={styles.saveText}>Zapisz temperaturę</Text>
                         </TouchableOpacity>
 
                         <Slider
@@ -346,19 +389,19 @@ const MultiTerrariumScreen: React.FC = () => {
                             value={humGoal}
                             onValueChange={setHumGoal}
                         />
-                        <Text style={styles.label}>Humidity Goal: {humGoal}%</Text>
+                        <Text style={styles.label}>Cel wilgotności: {humGoal}%</Text>
                         <TouchableOpacity
                             style={styles.saveButton}
                             onPress={() => handleSave('Humidity Goal', String(humGoal))}
                         >
-                            <Text style={styles.saveText}>Save Hum Goal</Text>
+                            <Text style={styles.saveText}>Zapisz wilgotność</Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity
                             style={styles.cancelButton}
                             onPress={() => setGeneralModalVisible(false)}
                         >
-                            <Text style={styles.cancelText}>Close</Text>
+                            <Text style={styles.cancelText}>Zamknij</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -368,7 +411,7 @@ const MultiTerrariumScreen: React.FC = () => {
             <Modal visible={thresholdModalVisible} animationType="slide" transparent>
                 <View style={styles.modalContainer}>
                     <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Edit Threshold Settings</Text>
+                        <Text style={styles.modalTitle}>Zmiana wartości granicznych</Text>
                         <Slider
                             style={styles.slider}
                             minimumValue={tempGoal}
@@ -377,12 +420,12 @@ const MultiTerrariumScreen: React.FC = () => {
                             value={maxTemp}
                             onValueChange={setMaxTemp}
                         />
-                        <Text style={styles.label}>Max Temp: {maxTemp.toFixed(1)}°C</Text>
+                        <Text style={styles.label}>Maksymalna temperatura: {maxTemp.toFixed(1)}°C</Text>
                         <TouchableOpacity
                             style={styles.saveButton}
                             onPress={() => handleSave('Max Temp', String(maxTemp))}
                         >
-                            <Text style={styles.saveText}>Save Max Temp</Text>
+                            <Text style={styles.saveText}>Zapisz temperaturę</Text>
                         </TouchableOpacity>
 
                         <Slider
@@ -393,12 +436,12 @@ const MultiTerrariumScreen: React.FC = () => {
                             value={minTemp}
                             onValueChange={setMinTemp}
                         />
-                        <Text style={styles.label}>Min Temp: {minTemp.toFixed(1)}°C</Text>
+                        <Text style={styles.label}>Minimalna temperatura: {minTemp.toFixed(1)}°C</Text>
                         <TouchableOpacity
                             style={styles.saveButton}
                             onPress={() => handleSave('Min Temp', String(minTemp))}
                         >
-                            <Text style={styles.saveText}>Save Min Temp</Text>
+                            <Text style={styles.saveText}>Zapisz temperaturę</Text>
                         </TouchableOpacity>
 
                         <Slider
@@ -409,12 +452,12 @@ const MultiTerrariumScreen: React.FC = () => {
                             value={maxHum}
                             onValueChange={setMaxHum}
                         />
-                        <Text style={styles.label}>Max Hum: {maxHum}%</Text>
+                        <Text style={styles.label}>Maksymalna wilgotność: {maxHum}%</Text>
                         <TouchableOpacity
                             style={styles.saveButton}
                             onPress={() => handleSave('Max Hum', String(maxHum))}
                         >
-                            <Text style={styles.saveText}>Save Max Hum</Text>
+                            <Text style={styles.saveText}>Zapisz wilgotność</Text>
                         </TouchableOpacity>
 
                         <Slider
@@ -425,23 +468,108 @@ const MultiTerrariumScreen: React.FC = () => {
                             value={minHum}
                             onValueChange={setMinHum}
                         />
-                        <Text style={styles.label}>Min Hum: {minHum}%</Text>
+                        <Text style={styles.label}>Minimalna wilgotność: {minHum}%</Text>
                         <TouchableOpacity
                             style={styles.saveButton}
                             onPress={() => handleSave('Min Hum', String(minHum))}
                         >
-                            <Text style={styles.saveText}>Save Min Hum</Text>
+                            <Text style={styles.saveText}>Zapisz wilgotność</Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity
                             style={styles.cancelButton}
                             onPress={() => setThresholdModalVisible(false)}
                         >
-                            <Text style={styles.cancelText}>Close</Text>
+                            <Text style={styles.cancelText}>Zamknij</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
             </Modal>
+
+            <Modal visible={waterModalVisible} animationType="slide" transparent>
+                <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                    <View style={styles.modalContainer}>
+                        <View style={styles.modalContent}>
+                            <Text style={styles.modalTitle}>Edycja ustawień wody</Text>
+
+                            <Text style={styles.label}>Czas startu dolewania wody:</Text>
+                            <TouchableOpacity
+                                onPress={() => setShowTimePicker(true)}
+                                style={[styles.input, { justifyContent: 'center' }]}
+                            >
+                                <Text>{waterTime || 'Wybierz czas'}</Text>
+                            </TouchableOpacity>
+
+                            <DateTimePickerModal
+                                isVisible={showTimePicker}
+                                mode="time"
+                                is24Hour={true}
+                                onConfirm={(date) => {
+                                    setShowTimePicker(false);
+                                    if (date) {
+                                        setSelectedTime(date);
+                                        const hours = date.getHours().toString().padStart(2, '0');
+                                        const minutes = date.getMinutes().toString().padStart(2, '0');
+                                        const timeString = `${hours}:${minutes}:00`; // seconds hardcoded
+                                        setWaterTime(timeString);
+                                    }
+                                }}
+                                onCancel={() => setShowTimePicker(false)}
+                            />
+
+
+
+                            <Text style={styles.label}>Czas trwania dolewania wody (sekundy):</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={waterPeriod}
+                                onChangeText={setWaterPeriod}
+                                placeholder="np. 45"
+                                keyboardType="numeric"
+                            />
+
+                            <TouchableOpacity
+                                style={styles.saveButton}
+                                onPress={async () => {
+                                    if (!selectedTerrarium) return;
+
+                                    try {
+                                        const id = selectedTerrarium.id;
+
+                                        const timeRes = await fetch(
+                                            `http://212.47.71.180:8080/terrariums/${id}/water-time?waterTime=${waterTime}`,
+                                            { method: 'PUT' }
+                                        );
+                                        if (!timeRes.ok) throw new Error("Failed to update water time");
+
+                                        const periodRes = await fetch(
+                                            `http://212.47.71.180:8080/terrariums/${id}/water-period?waterPeriod=${waterPeriod}`,
+                                            { method: 'PUT' }
+                                        );
+                                        if (!periodRes.ok) throw new Error("Failed to update water period");
+
+                                        Alert.alert("Sukces", "Ustawienia wody zaktualizowano!");
+                                        setWaterModalVisible(false);
+                                    } catch (error) {
+                                        console.error(error);
+                                        Alert.alert("Błąd", "Nie udało się zaktualizować ustawień wody");
+                                    }
+                                }}
+                            >
+                                <Text style={styles.saveText}>Zapisz</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.cancelButton}
+                                onPress={() => setWaterModalVisible(false)}
+                            >
+                                <Text style={styles.cancelText}>Zamknij</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+
         </ImageBackground>
     );
 };

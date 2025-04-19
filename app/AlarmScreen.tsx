@@ -15,6 +15,7 @@ interface Alarm {
     start_time: string;
     end_time: string | null;
     is_active: boolean;
+    type: string;
     highest_offshoot: number | null;
 }
 
@@ -92,7 +93,7 @@ const AlarmsScreen: React.FC = () => {
 
     return (
         <ImageBackground
-            source={require('../app/app_tabs/backround_image.jpg')}
+            source={require('./app_tabs/background_image.png')}
             style={styles.background}
             resizeMode="cover"
         >
@@ -125,6 +126,7 @@ const AlarmsScreen: React.FC = () => {
                                             <Text style={styles.alarmText}>Start alarmu: {alarm.start_time}</Text>
                                             <Text style={styles.alarmText}>Koniec alarmu: {alarm.end_time || 'Trwający'}</Text>
                                             <Text style={styles.alarmText}>Amplituda (°C): {alarm.highest_offshoot ?? 'Brak danych'}</Text>
+                                            <Text style={styles.alarmText}>Rodzaj alarmy: {alarm.type}</Text>
                                         </View>
 
                                         {!alarm.is_active && (

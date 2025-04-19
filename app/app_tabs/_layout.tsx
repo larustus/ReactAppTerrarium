@@ -6,7 +6,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 const TabsLayout: React.FC = () => {
     return (
         <ImageBackground
-            source={require('../app_tabs/backround_image.jpg')} // Replace with your image path
+            source={require('./background_image.png')} // Replace with your image path
             style={styles.background}
             resizeMode="cover"
         >
