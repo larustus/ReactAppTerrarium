@@ -48,6 +48,8 @@ const MultiTerrariumScreen: React.FC = () => {
     const [generalModalVisible, setGeneralModalVisible] = useState(false);
     const [thresholdModalVisible, setThresholdModalVisible] = useState(false);
     const [waterModalVisible, setWaterModalVisible] = useState(false);
+    const [pinModalVisible, setPinModalVisible] = useState(false);
+    const [assignedPins, setAssignedPins] = useState<{ id: number; function: string }[]>([]);
 
     // Inputs for General Settings
     const [name, setName] = useState<string>('');
@@ -123,6 +125,17 @@ const MultiTerrariumScreen: React.FC = () => {
         setThresholdModalVisible(true);
     };
 
+    const openPinModal = async (terrarium: TerrariumData) => {
+        try {
+            const response = await fetch(`http://212.47.71.180:8080/pins/assigned/1/${terrarium.id}`);
+            const data = await response.json();
+            setAssignedPins(data);
+            setPinModalVisible(true);
+        } catch (error) {
+            console.error("Failed to fetch pins:", error);
+            Alert.alert("Błąd", "Nie udało się pobrać przypisanych pinów.");
+        }
+    };
 
     const openWaterModal = (terrarium: TerrariumData) => {
         setSelectedTerrarium(terrarium);
@@ -281,9 +294,14 @@ const MultiTerrariumScreen: React.FC = () => {
                         <View style={styles.terrariumCard}>
                             <View style={styles.row}>
                                 <Text style={styles.nameText}>{name}</Text>
-                                <TouchableOpacity onPress={() => confirmDeleteTerrarium(item.id)}>
-                                    <Icon name="close-circle" size={24} color="#f44336" />
-                                </TouchableOpacity>
+                                <View style={{ flexDirection: 'row' }}>
+                                    <TouchableOpacity onPress={() => openPinModal(item)} style={{ marginRight: 10 }}>
+                                        <Icon name="chip" size={24} color="#4CAF50" />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity onPress={() => confirmDeleteTerrarium(item.id)}>
+                                        <Icon name="close-circle" size={24} color="#f44336" />
+                                    </TouchableOpacity>
+                                </View>
                             </View>
                             <View style={styles.row}>
                                 <Icon name="thermometer" size={24} color="#ff5722" />
@@ -568,6 +586,29 @@ const MultiTerrariumScreen: React.FC = () => {
                         </View>
                     </View>
                 </TouchableWithoutFeedback>
+            </Modal>
+
+            <Modal visible={pinModalVisible} animationType="slide" transparent>
+                <View style={styles.modalContainer}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>Przypisane piny</Text>
+                        {assignedPins.length > 0 ? (
+                            assignedPins.map((pin, index) => (
+                                <Text key={index} style={styles.label}>
+                                    Funkcja: {pin.function} | Pin ID: {pin.id}
+                                </Text>
+                            ))
+                        ) : (
+                            <Text style={styles.label}>Brak przypisanych pinów.</Text>
+                        )}
+                        <TouchableOpacity
+                            style={styles.cancelButton}
+                            onPress={() => setPinModalVisible(false)}
+                        >
+                            <Text style={styles.cancelText}>Zamknij</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
             </Modal>
 
         </ImageBackground>
