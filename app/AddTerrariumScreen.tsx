@@ -180,7 +180,7 @@ const AddTerrariumScreen: React.FC = () => {
             });
             if (response.ok) {
                 const responseText = await response.text();
-                Alert.alert('Success', 'Terrarium created successfully!');
+                Alert.alert('Sukces', 'Terrarium zostało utworzone!');
                 // Extract terrarium ID from response text.
                 // Assumes response text in the form "Terrarium saved with ID: X"
                 const terrariumId = parseInt(responseText.split(':')[1].trim());
